@@ -10,6 +10,7 @@ import net.blueberrymc.native_util.NativeUtil;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,6 +24,7 @@ public class MethodTracerPlugin extends JavaPlugin {
     @Override
     public void onLoad() {
         ClassPool cp = ClassPool.getDefault();
+        List<ClassDefinition> classDefinitions = new ArrayList<>();
         getConfig().getValues(true).forEach((cl, maybeList) -> {
             String cname = cl.replace('/', '.');
             getLogger().info("Processing " + cname);
@@ -31,14 +33,17 @@ public class MethodTracerPlugin extends JavaPlugin {
                 getLogger().info(cname + " is already loaded, redefining");
                 byte[] bytes = transformClass(cp, cl, maybeList);
                 if (bytes != null) {
-                    NativeUtil.redefineClasses(new ClassDefinition[] { new ClassDefinition(clazz, bytes) });
-                    getLogger().info("Successfully redefined " + cname);
+                    classDefinitions.add(new ClassDefinition(clazz, bytes));
                 }
             } else {
                 getLogger().info("Added " + cname + " into queue");
                 transformQueue.put(cname, () -> transformClass(cp, cl, maybeList));
             }
         });
+        if (!classDefinitions.isEmpty()) {
+            NativeUtil.redefineClasses(classDefinitions.toArray(new ClassDefinition[0]));
+            getLogger().info("Successfully redefined " + classDefinitions.size() + " classes");
+        }
         NativeUtil.registerClassLoadHook((classLoader, cl, clazz, protectionDomain, bytes) -> {
             Supplier<byte[]> byteArraySupplier = transformQueue.remove(cl.replace('/', '.'));
             if (byteArraySupplier == null) return null;
@@ -74,7 +79,10 @@ public class MethodTracerPlugin extends JavaPlugin {
                     continue;
                 }
                 try {
-                    cm.insertBefore("{ java.lang.Thread.dumpStack(); }");
+                    cm.insertBefore("{" +
+                            "        org.bukkit.plugin.Plugin plugin = org.bukkit.Bukkit.getPluginManager().getPlugin(\"MethodTracer\");\n" +
+                            "        if (plugin != null && plugin.getClass().getTypeName().equals(\"net.azisaba.methodTracer.MethodTracerPlugin\") && plugin.isEnabled()) Thread.dumpStack();" +
+                            "}");
                 } catch (CannotCompileException e) {
                     getLogger().warning("Failed to compile source code on method of class " + cl + ", name: " + name + ", desc: " + desc);
                     e.printStackTrace();
