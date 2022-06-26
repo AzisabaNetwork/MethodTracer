@@ -1,12 +1,12 @@
-package net.azisaba.methodTracer;
+package net.azisaba.methodtracer;
 
 import javassist.CannotCompileException;
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.CtMethod;
 import javassist.NotFoundException;
-import net.blueberrymc.native_util.ClassDefinition;
-import net.blueberrymc.native_util.NativeUtil;
+import net.blueberrymc.nativeutil.ClassDefinition;
+import net.blueberrymc.nativeutil.NativeUtil;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
