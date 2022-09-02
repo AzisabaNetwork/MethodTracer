@@ -1,5 +1,5 @@
 name: MethodTracer
 main: net.azisaba.methodtracer.MethodTracerPlugin
-version: 1.0.2
+version: 1.1.0
 author: acrylic-style
 api-version: 1.13

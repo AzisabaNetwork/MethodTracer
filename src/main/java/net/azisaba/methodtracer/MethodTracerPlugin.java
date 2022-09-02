@@ -12,13 +12,18 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public class MethodTracerPlugin extends JavaPlugin {
+    private static final String DEFAULT_CODE = "Thread.dumpStack();";
     private final Map<String, Supplier<byte[]>> transformQueue = new HashMap<>();
 
     @Override
@@ -51,21 +56,42 @@ public class MethodTracerPlugin extends JavaPlugin {
         });
     }
 
-    @SuppressWarnings("unchecked")
     private byte[] transformClass(ClassPool cp, String cl, Object maybeList) {
         try {
             CtClass cc = cp.get(cl.replace('/', '.'));
-            List<String> list;
+            Set<String> list;
+            Map<String, String> code = new HashMap<>();
             if (maybeList instanceof String) {
-                list = Collections.singletonList((String) maybeList);
+                list = Collections.singleton((String) maybeList);
             } else if (maybeList instanceof List) {
                 if (!((List<?>) maybeList).isEmpty() && !(((List<?>) maybeList).get(0) instanceof String)) {
                     getLogger().warning("Wrong type of list: expected String, but got " + (((List<?>) maybeList).get(0).getClass().getTypeName()));
                     return null;
                 }
-                list = (List<String>) maybeList;
+                list = new HashSet<>();
+                for (Object o : ((Collection<?>) maybeList)) {
+                    if (o instanceof String) {
+                        list.add((String) o);
+                    } else if (o instanceof Map) {
+                        Map<?, ?> map = (Map<?, ?>) o;
+                        if (map.isEmpty()) {
+                            return null;
+                        }
+                        getLogger().info("Map: " + map);
+                        Object keyValue = map.keySet().stream().findFirst().orElseThrow(IllegalArgumentException::new);
+                        if (!(keyValue instanceof String)) {
+                            getLogger().warning("Wrong type of map (key): expected String, but got " + keyValue.getClass().getTypeName());
+                        }
+                        keyValue = map.values().stream().findFirst().orElseThrow(IllegalArgumentException::new);
+                        if (!(keyValue instanceof String)) {
+                            getLogger().warning("Wrong type of map (value): expected String, but got " + keyValue.getClass().getTypeName());
+                        }
+                        list = map.keySet().stream().map(Object::toString).collect(Collectors.toSet());
+                        code.putAll(map.entrySet().stream().collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().toString())));
+                    }
+                }
             } else {
-                getLogger().warning("Unknown type of object: expected List or String, but got " + (maybeList == null ? "null" : maybeList.getClass().getTypeName()));
+                getLogger().warning("Unknown type of object: expected Map, List or String, but got " + (maybeList == null ? "null" : maybeList.getClass().getTypeName()));
                 return null;
             }
             for (String signature : list) {
@@ -81,7 +107,9 @@ public class MethodTracerPlugin extends JavaPlugin {
                 try {
                     cm.insertBefore("{" +
                             "        org.bukkit.plugin.Plugin plugin = org.bukkit.Bukkit.getPluginManager().getPlugin(\"MethodTracer\");\n" +
-                            "        if (plugin != null && plugin.getClass().getTypeName().equals(\"net.azisaba.methodTracer.MethodTracerPlugin\") && plugin.isEnabled()) Thread.dumpStack();" +
+                            "        if (plugin != null && plugin.getClass().getTypeName().equals(\"net.azisaba.methodtracer.MethodTracerPlugin\") && plugin.isEnabled()) {\n" +
+                            "            " + code.getOrDefault(signature, DEFAULT_CODE) + "\n" +
+                            "        }" +
                             "}");
                 } catch (CannotCompileException e) {
                     getLogger().warning("Failed to compile source code on method of class " + cl + ", name: " + name + ", desc: " + desc);
