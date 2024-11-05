@@ -1,14 +1,12 @@
 package net.azisaba.methodtracer;
 
-import javassist.CannotCompileException;
-import javassist.ClassPool;
-import javassist.CtClass;
-import javassist.CtMethod;
-import javassist.NotFoundException;
+import javassist.*;
 import net.blueberrymc.nativeutil.ClassDefinition;
 import net.blueberrymc.nativeutil.NativeUtil;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,6 +32,7 @@ public class MethodTracerPlugin extends JavaPlugin {
             String cname = cl.replace('/', '.');
             getLogger().info("Processing " + cname);
             Class<?> clazz = getClass(cname);
+            cp.appendClassPath(new ClassClassPath(clazz));
             if (clazz != null) {
                 getLogger().info(cname + " is already loaded, redefining");
                 byte[] bytes = transformClass(cp, cl, maybeList);
@@ -117,6 +116,7 @@ public class MethodTracerPlugin extends JavaPlugin {
                 }
             }
             byte[] bytes = cc.toBytecode();
+            writeFile(".methodtracer/transformed/" + cl + ".class", bytes);
             getLogger().info("Successfully transformed " + cl);
             return bytes;
         } catch (NotFoundException | IOException | CannotCompileException e) {
@@ -140,5 +140,18 @@ public class MethodTracerPlugin extends JavaPlugin {
                 .filter(it -> it.getTypeName().equals(clazz))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private static void writeFile(String path, byte[] bytes) {
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash != -1) {
+            String dir = path.substring(0, lastSlash);
+            new File(dir).mkdirs();
+        }
+        try (FileOutputStream fos = new FileOutputStream(path)) {
+            fos.write(bytes);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
